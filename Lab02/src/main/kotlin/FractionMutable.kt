@@ -1,48 +1,48 @@
-class FractionMutable(private var a: Int, private var b: Int, private var sign: Int = 1) {
+class FractionMutable(
+    private var numerator: Int,
+    private var denominator: Int,
+    private var sign: Int = 1)
+{
     init {
-        if (sign != 1 && sign != -1) throw IllegalArgumentException("Sign can only be 1 or -1")
+        require(sign == 1 || sign == -1) { "Sign can only be 1 or -1" }
         simplify()
     }
 
-    fun getNumerator(): Int = a * sign
-    fun getDenominator(): Int = b
+    fun getNumerator(): Int = numerator * sign
+    fun getDenominator(): Int = denominator
 
-    fun getGCD(x: Int, y: Int): Int {
-        return if (y == 0) x else getGCD(y, x % y)
-    }
+    private fun getGCD(x: Int, y: Int): Int = if (y == 0) x else getGCD(y, x % y)
 
     fun simplify() {
-        val gcd = getGCD(a, b)
-        a = a.div(gcd)
-        b = b.div(gcd)
+        val gcd = getGCD(numerator, denominator)
+        numerator /= gcd
+        denominator /= gcd
 
-        if (a < 0) a = -a.also { sign = -sign }
-        if (b < 0) b = -b.also { sign = -sign }
+        if (numerator < 0) numerator = -numerator.also { sign = -sign }
+        if (denominator < 0) denominator = -denominator.also { sign = -sign }
     }
 
     fun negate() { sign = -sign }
 
-    fun add(f: FractionMutable) {
-        a = a*f.getDenominator() + b*f.getNumerator()
-        b *= f.getDenominator()
+    fun add(other: FractionMutable) {
+        numerator = numerator*other.getDenominator() + denominator*other.getNumerator()
+        denominator *= other.getDenominator()
         simplify()
     }
 
-    fun mult(f: FractionMutable) {
-        a *= f.getNumerator()
-        b *= f.getDenominator()
+    fun mult(other: FractionMutable) {
+        numerator *= other.getNumerator()
+        denominator *= other.getDenominator()
         simplify()
     }
 
-    fun div(f: FractionMutable) {
-        a *= f.getDenominator()
-        b *= f.getNumerator()
+    fun div(other: FractionMutable) {
+        numerator *= other.getDenominator()
+        denominator *= other.getNumerator()
         simplify()
     }
 
-    fun intPart(): Int {
-        return a.div(b)
-    }
+    fun intPart(): Int = numerator / denominator
 
-    override fun toString(): String = "${if (sign == -1) "-" else ""}$a/$b"
+    override fun toString(): String = "${if (sign == -1) "-" else ""}$numerator/$denominator"
 }
