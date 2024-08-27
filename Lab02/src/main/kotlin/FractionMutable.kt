@@ -1,8 +1,8 @@
 class FractionMutable(
     private var numerator: Int,
     private var denominator: Int,
-    private var sign: Int = 1)
-{
+    private var sign: Int = 1
+) {
     init {
         require(sign == 1 || sign == -1) { "Sign can only be 1 or -1" }
         simplify()

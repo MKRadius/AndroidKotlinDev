@@ -2,8 +2,8 @@ class CourseRecord(
     private var name: String,
     private var yearCompleted: Int,
     private var credits: Int,
-    private var grade: Double)
-{
+    private var grade: Double
+) {
     fun getName(): String = name
     fun setName(name: String) { this.name = name }
 

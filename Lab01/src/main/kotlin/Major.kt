@@ -1,7 +1,7 @@
 class Major(
     private var name: String,
-    private var students: MutableList<Student> = mutableListOf())
-{
+    private var students: MutableList<Student> = mutableListOf()
+) {
     fun getName(): String = name
     fun setName(name: String) { this.name = name }
 
