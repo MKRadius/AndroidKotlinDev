@@ -2,7 +2,8 @@ class Lotto(
     val lottoRange: IntRange = 1..40,
     val n: Int = 7,
 ) {
-    private val secretNumbers: List<Int> = pickNDistinct(lottoRange, n)!!
+    val secretNumbers: List<Int> = pickNDistinct(lottoRange, n)!!
+//    val secretNumbers: List<Int> = listOf(1,35,36,37,38,39,40)
 
     // A
     fun pickNDistinct(range: IntRange, n: Int): List<Int>? {
@@ -78,17 +79,55 @@ fun findLotto(lotto: Lotto): Pair<Int, List<Int>> {
     // - do not use the secret numbers in other way either directly or indirectly.
     // - return the number of steps taken to find the correct lotto numbers as well as the list of correct numbers as a Pair.
     var steps: Int = 0
-    var computerGuess: List<Int>
+    var computerGuess: List<Int> = (lotto.lottoRange.first..lotto.lottoRange.last).take(lotto.n)
+    var unsureList = mutableListOf<Int>()
+    var checkList: MutableList<Int> = ((lotto.n + 1)..lotto.lottoRange.last).toMutableList()
 
-    do {
-         computerGuess = (lotto.lottoRange.first..lotto.lottoRange.last)
-            .shuffled()
-            .take(lotto.n)
-            .toMutableList()
-            .sorted()
-         steps++
+    println(lotto.secretNumbers)
+    println(computerGuess)
+
+    var index: Int = 0
+
+    while (checkList.isNotEmpty() && index < lotto.n) {
+        var popNum = checkList.removeFirst()
+        var tempList = computerGuess.toMutableList()
+        var reminder = tempList[index]
+        tempList[index] = popNum
+
+        if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) {
+            computerGuess = tempList
+            index++
+        }
+        else if (lotto.checkGuess(tempList) < lotto.checkGuess(computerGuess)) {
+            index++
+        }
+        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) {
+            tempList[index] = reminder
+            unsureList.add(popNum)
+        }
+
+        steps++
     }
-    while (lotto.checkGuess(computerGuess) > lotto.n)
+
+    if (lotto.checkGuess(computerGuess) == lotto.n) return Pair(steps, computerGuess)
+
+    index = 6
+
+    while (unsureList.isNotEmpty()) {
+        var popNum = unsureList.removeFirst()
+        var tempList = computerGuess.toMutableList()
+        tempList[index] = popNum
+
+        if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) {
+            computerGuess = tempList
+            index--
+        }
+        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) {
+            index--
+        }
+
+        steps++
+    }
 
     return Pair(steps, computerGuess)
 }
