@@ -2,17 +2,16 @@ class Lotto(
     val lottoRange: IntRange = 1..40,
     val n: Int = 7,
 ) {
-    val secretNumbers: List<Int> = pickNDistinct(lottoRange, n)!!
-//    val secretNumbers: List<Int> = listOf(1,35,36,37,38,39,40)
+    private val secretNumbers: List<Int> = pickNDistinct(lottoRange, n) ?: lottoRange.shuffled().take(n)
+
+//    val secretNumbers: List<Int> = listOf(1, 7, 8, 9, 10, 11, 40) // hard-set secret numbers for testing purpose
+//    val secretNumbers: List<Int> = listOf(6, 13, 19, 21, 24, 37, 39)
+//    val secretNumbers: List<Int> = listOf(5, 10, 12, 20, 21, 25, 31)
 
     // A
     fun pickNDistinct(range: IntRange, n: Int): List<Int>? {
         // returns a list with n distinct ints from range
-        return range
-            .shuffled()
-            .take(n)
-            .toMutableList()
-            .sorted()
+        return range.shuffled().take(n).sorted()
     }
 
     fun numDistinct(list: List<Int>): Int {
@@ -66,10 +65,10 @@ fun playLotto() {
     }
     while (!lotto.isLegalLottoGuess(userInput))
 
-    val computerGuess = findLotto(lotto)
+    val computerLottoGuess = findLotto(lotto)
 
     println("lotto numbers: $userInput, you got ${lotto.checkGuess(userInput)} correct")
-    println("computer guess in ${computerGuess.first} steps is ${computerGuess.second}")
+    println("computer guess in ${computerLottoGuess.first} steps is ${computerLottoGuess.second}")
 }
 
 // C
@@ -78,13 +77,11 @@ fun findLotto(lotto: Lotto): Pair<Int, List<Int>> {
     // - use only function checkGuess to check the guesses
     // - do not use the secret numbers in other way either directly or indirectly.
     // - return the number of steps taken to find the correct lotto numbers as well as the list of correct numbers as a Pair.
-    var steps: Int = 0
-    var computerGuess: List<Int> = (lotto.lottoRange.first..lotto.lottoRange.last).take(lotto.n)
-    var unsureList = mutableListOf<Int>()
-    var checkList: MutableList<Int> = ((lotto.n + 1)..lotto.lottoRange.last).toMutableList()
 
-    println(lotto.secretNumbers)
-    println(computerGuess)
+    var computerGuess: List<Int> = (lotto.lottoRange.first..lotto.lottoRange.last).take(lotto.n)
+    val unsureList: MutableList<Int> = mutableListOf<Int>()
+    val checkList: MutableList<Int> = ((lotto.n + 1)..lotto.lottoRange.last).toMutableList()
+    var steps: Int = 1
 
     var index: Int = 0
 
@@ -94,42 +91,110 @@ fun findLotto(lotto: Lotto): Pair<Int, List<Int>> {
         var reminder = tempList[index]
         tempList[index] = popNum
 
-        if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) {
-            computerGuess = tempList
-            index++
-        }
-        else if (lotto.checkGuess(tempList) < lotto.checkGuess(computerGuess)) {
-            index++
-        }
-        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) {
-            tempList[index] = reminder
-            unsureList.add(popNum)
-        }
-
+        if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) { computerGuess = tempList; index++ }
+        else if (lotto.checkGuess(tempList) < lotto.checkGuess(computerGuess)) index++
+        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { tempList[index] = reminder; unsureList.add(popNum) }
         steps++
     }
 
-    if (lotto.checkGuess(computerGuess) == lotto.n) return Pair(steps, computerGuess)
+    if (lotto.checkGuess(computerGuess) == lotto.n) return Pair(++steps, computerGuess.sorted())
 
-    index = 6
-
-    while (unsureList.isNotEmpty()) {
+    while (unsureList.isNotEmpty() && lotto.checkGuess(computerGuess) != lotto.n) {
         var popNum = unsureList.removeFirst()
         var tempList = computerGuess.toMutableList()
         tempList[index] = popNum
 
-        if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) {
-            computerGuess = tempList
-            index--
-        }
-        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) {
-            index--
-        }
-
+        if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) { computerGuess = tempList; index++ }
+        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { unsureList.addLast(popNum) }
         steps++
     }
 
-    return Pair(steps, computerGuess)
+    return Pair(steps, computerGuess.sorted())
+
+
+
+// Find sureList (numbers that matches)
+//    var computerGuess: List<Int> = (lotto.lottoRange.first..lotto.lottoRange.last).take(lotto.n)
+//    val sureList: MutableList<Int> = mutableListOf<Int>()
+//    val checkList: MutableList<Int> = ((lotto.n + 1)..lotto.lottoRange.last).toMutableList()
+//    var steps: Int = 1
+//
+//    var index: Int = 0
+//
+//    while (checkList.size > 0) {
+//        var testNum: Int = checkList.removeFirst()
+//        var tempList = computerGuess.toMutableList()
+//        tempList[0] = testNum
+//
+//        if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { steps++; checkList.addLast(testNum); continue }
+//        else if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) { steps++; computerGuess = tempList; break }
+//        else if (lotto.checkGuess(tempList) < lotto.checkGuess(computerGuess)) { steps++; break }
+//    }
+//
+//    while (checkList.size > 0) {
+//        var testNum: Int = checkList.removeFirst()
+//        var tempList = computerGuess.toMutableList()
+//        tempList[0] = testNum
+//
+//        if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { steps++; sureList.add(testNum); }
+//        else if (lotto.checkGuess(tempList) < lotto.checkGuess(computerGuess)) { steps++; }
+//    }
+//
+//    index = 1
+//    while (sureList.isNotEmpty()) {
+//        var popNum = sureList.removeLast()
+//        var tempList = computerGuess.toMutableList()
+//        tempList[index] = popNum
+//
+//        if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) { computerGuess = tempList; index++ }
+//        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) index++
+//        steps++
+//    }
+//
+//    return Pair(steps, computerGuess.sorted())
+
+
+// Find sureList, replace from index 2 -> not efficient
+//    var computerGuess: List<Int> = (lotto.lottoRange.first..lotto.lottoRange.last).take(lotto.n)
+//    val sureList: MutableList<Int> = mutableListOf<Int>()
+//    val checkList: MutableList<Int> = ((lotto.n + 1)..lotto.lottoRange.last).toMutableList()
+//    var steps: Int = 1
+//
+//    var index: Int = 0
+//
+//    while (checkList.size > 0) {
+//        var testNum: Int = checkList.removeFirst()
+//        var tempList = computerGuess.toMutableList()
+//        tempList[0] = testNum
+//
+//        if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { steps++; checkList.addLast(testNum); continue }
+//        else if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) { steps++; computerGuess = tempList; break }
+//        else if (lotto.checkGuess(tempList) < lotto.checkGuess(computerGuess)) { steps++; break }
+//    }
+//
+//    while (checkList.size > 0) {
+//        var testNum: Int = checkList.removeFirst()
+//        var tempList = computerGuess.toMutableList()
+//        tempList[0] = testNum
+//
+//        if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { steps++; sureList.add(testNum); }
+//        else if (lotto.checkGuess(tempList) < lotto.checkGuess(computerGuess)) { steps++; }
+//    }
+//
+//    index = 1
+//
+//    while (sureList.isNotEmpty() && lotto.checkGuess(computerGuess) != lotto.n) {
+//        var popNum = sureList.removeFirst()
+//        var tempList = computerGuess.toMutableList()
+//        tempList[index] = popNum
+//
+//        if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) { computerGuess = tempList; index++ }
+//        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { sureList.addLast(popNum) }
+//
+//        steps++
+//    }
+//
+//    return Pair(steps, computerGuess.sorted())
 }
 
 fun main() {
