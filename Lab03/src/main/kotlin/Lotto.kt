@@ -50,7 +50,7 @@ class Lotto(
         // - prints the number of correctly guessed numbers
         // - lets user either continue with another round or end
 
-        secretNumbers = pickNDistinct(lottoRange, n) ?: lottoRange.shuffled().take(n)
+//        secretNumbers = pickNDistinct(lottoRange, n) ?: lottoRange.shuffled().take(n)
 
         var userInput: List<Int>
 
@@ -74,31 +74,20 @@ fun findLotto(lotto: Lotto): Pair<Int, List<Int>> {
     // - do not use the secret numbers in other way either directly or indirectly.
     // - return the number of steps taken to find the correct lotto numbers as well as the list of correct numbers as a Pair.
 
-    var computerGuess: List<Int> = (lotto.lottoRange.first..lotto.lottoRange.last).take(lotto.n)
-    val unsureList: MutableList<Int> = mutableListOf<Int>()
-    val checkList: MutableList<Int> = ((lotto.n + 1)..lotto.lottoRange.last).toMutableList()
+    var computerGuess: List<Int> = (lotto.lottoRange.first..(lotto.n)).toList()
+    val checkList: MutableList<Int> = ((lotto.n)+1..lotto.lottoRange.last).toMutableList()
+
     var steps: Int = 1
     var index: Int = 0
 
-    while (checkList.isNotEmpty() && index < lotto.n) {
+    while (checkList.isNotEmpty() && index < lotto.n && lotto.checkGuess(computerGuess) != lotto.n) {
         var popNum = checkList.removeFirst()
         var tempList = computerGuess.toMutableList()
-        var reminder = tempList[index]
         tempList[index] = popNum
 
         if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) { computerGuess = tempList; index++ }
         else if (lotto.checkGuess(tempList) < lotto.checkGuess(computerGuess)) index++
-        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { tempList[index] = reminder; unsureList.add(popNum) }
-        steps++
-    }
-
-    while (unsureList.isNotEmpty() && lotto.checkGuess(computerGuess) != lotto.n) {
-        var popNum = unsureList.removeFirst()
-        var tempList = computerGuess.toMutableList()
-        tempList[index] = popNum
-
-        if (lotto.checkGuess(tempList) > lotto.checkGuess(computerGuess)) { computerGuess = tempList; index++ }
-        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { unsureList.addLast(popNum) }
+        else if (lotto.checkGuess(tempList) == lotto.checkGuess(computerGuess)) { checkList.addLast(popNum) }
         steps++
     }
 
