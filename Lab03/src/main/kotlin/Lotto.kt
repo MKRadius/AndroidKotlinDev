@@ -50,7 +50,7 @@ class Lotto(
         // - prints the number of correctly guessed numbers
         // - lets user either continue with another round or end
 
-//        secretNumbers = pickNDistinct(lottoRange, n) ?: lottoRange.shuffled().take(n)
+        secretNumbers = pickNDistinct(lottoRange, n) ?: lottoRange.shuffled().take(n)
 
         var userInput: List<Int>
 
