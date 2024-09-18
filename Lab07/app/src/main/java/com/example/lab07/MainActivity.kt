@@ -65,12 +65,18 @@ class MainActivity : ComponentActivity() {
         /* then we measure the execution time of two simultaneous deposit tasks using coroutines */
         withTimeMeasurement("Two $N times deposit coroutines together", isActive = true) {
             runBlocking {
-                launch {
-                    for (i in 1..N) account.deposit(1.0)
-                }.join()
-                launch {
-                    for (i in 1..N) account.deposit(1.0)
-                }.join()
+                val job1 = launch {
+                    for (i in 1..N) {
+                        account.deposit(1.0)
+                    }
+                }
+                val job2 = launch {
+                    for (i in 1..N) {
+                        account.deposit(1.0)
+                    }
+                }
+                job1.join()
+                job2.join()
                 saldo2 = account.saldo()
             }
         }
