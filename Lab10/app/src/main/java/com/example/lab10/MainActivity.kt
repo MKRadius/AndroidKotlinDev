@@ -64,7 +64,7 @@ fun GameScreen() {
         ) {
             Text("Make Guess!")
         }
-        if (validInput) Text("${numGame.makeGuess(userInput.toInt())} [${numRange.first}, ${numRange.last}]")
+        if (validInput) Text("${numGame.makeGuess(userInput.toInt())} ${numGame.guesses.sorted()}")
     }
 }
 
