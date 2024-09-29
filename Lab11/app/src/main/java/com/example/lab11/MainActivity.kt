@@ -76,9 +76,7 @@ class MyViewModel : ViewModel() {
             val device = result.device
             val deviceAddress = device.address
             mResults[deviceAddress] = result
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Log.d("DBG", "Device address: $deviceAddress (${result.isConnectable})")
-            }
+            Log.d("DBG", "Device address: $deviceAddress (${result.isConnectable})") // build.gradle: minSdk = 26
         }
     }
 }
@@ -112,7 +110,11 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
                 value!!.forEach { result ->
                     val deviceName = result.device.name ?: "Unknown Device"
                     val deviceAddress = result.device.address
-                    Text(text = "$deviceName ($deviceAddress)", modifier = Modifier.padding(8.dp), color = if (result.isConnectable) Color.Gray else Color.Black)
+                    Text(
+                        text = "$deviceName ($deviceAddress)",
+                        modifier = Modifier.padding(8.dp),
+                        color = if (result.isConnectable) Color.Gray else Color.Black
+                    )
                 }
             }
         }
@@ -129,7 +131,7 @@ class MainActivity : ComponentActivity() {
         } else if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.d("DBG", "No fine location access")
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1);
-            return true // assuming that the user grants permission
+            return true
         }
         return true
     }
