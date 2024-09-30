@@ -23,11 +23,14 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -55,9 +58,12 @@ class MyViewModel : ViewModel() {
     val fScanning = MutableLiveData<Boolean>(false)
     private val mResults = java.util.HashMap<String, ScanResult>()
 
+    val mBPM = MutableLiveData<Int>(0)
+
     fun scanDevices(scanner: BluetoothLeScanner) {
         viewModelScope.launch(Dispatchers.IO) {
             fScanning.postValue(true)
+            mResults.clear()
             val settings = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .setReportDelay(0)
@@ -144,7 +150,7 @@ class GattClientCallback(): BluetoothGattCallback() {
     @Deprecated("Deprecated in Java")
     override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
         Log.d("DBG", "Characteristic data received")
-        if (characteristic?.uuid == UUID_HEART_RATE_MEASUREMENT) {
+        if (characteristic.uuid == UUID_HEART_RATE_MEASUREMENT) {
             val heartRateValue = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 1)
             heartRate.value = heartRateValue
             Log.d("BLE", "Heart rate: $heartRateValue")
@@ -159,7 +165,7 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
     val fScanning: Boolean by model.fScanning.observeAsState(false)
 
     var btGatt: BluetoothGatt? = null
-    val mGattCallback = GattClientCallback()
+    var mGattCallback = GattClientCallback()
 
 
     Column(
@@ -175,6 +181,10 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
 
         Spacer(modifier = Modifier.padding(8.dp))
 
+
+
+        Spacer(modifier = Modifier.padding(8.dp))
+
         if (value.isNullOrEmpty()) {
             Text(text = "No devices found", modifier = Modifier.padding(8.dp))
         } else {
@@ -182,22 +192,23 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
                 modifier = Modifier.fillMaxSize().padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                value!!.forEach { result ->
-                    val deviceName = result.device.name ?: "Unknown Device"
-                    val deviceAddress = result.device.address
-                    Text(
-                        text = "$deviceName ($deviceAddress)",
-                        modifier = Modifier.padding(8.dp),
-                        color = if (result.isConnectable) Color.Gray else Color.Black
-                    )
-                    btGatt = result.device.connectGatt(context, false, mGattCallback)
-                    Log.d("DBG", "Connected gatt $btGatt ${btGatt}")
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                    items(value ?: emptyList()) { result ->
+                        val deviceName = result.device.name ?: "Unknown Device"
+                        val deviceAddress = result.device.address
+                        Text(
+                            text = "$deviceName ($deviceAddress)",
+                            modifier = Modifier.padding(8.dp).clickable {
+                                Log.d("DBG", "Clicked $deviceName $deviceAddress")
+                                btGatt = result.device.connectGatt(context, false, mGattCallback)
+                            },
+                            color = if (result.isConnectable) Color.Gray else Color.DarkGray
+                        )
+                    }
                 }
+
             }
         }
-
-
-
     }
 }
 
@@ -208,10 +219,12 @@ class MainActivity : ComponentActivity() {
         if (mBluetoothAdapter == null || !mBluetoothAdapter!!.isEnabled) {
             Log.d("DBG", "No Bluetooth LE capability")
             return false
-        } else if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            Log.d("DBG", "No fine location access")
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1);
-            return true
+        }
+        else if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
+            checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED ||
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED ||
+            checkSelfPermission(Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADMIN), 1);
         }
         return true
     }
@@ -222,8 +235,6 @@ class MainActivity : ComponentActivity() {
 
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         mBluetoothAdapter = bluetoothManager.adapter
-
-
 
         setContent {
             Lab13Theme {
