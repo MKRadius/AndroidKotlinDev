@@ -24,16 +24,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -42,6 +47,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -54,11 +61,22 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 class MyViewModel : ViewModel() {
+    companion object GattAttributes {
+        const val SCAN_PERIOD: Long = 3000
+        const val STATE_DISCONNECTED = 0
+        const val STATE_CONNECTING = 1
+        const val STATE_CONNECTED = 2
+        val UUID_HEART_RATE_MEASUREMENT = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
+        val UUID_HEART_RATE_SERVICE = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
+        val UUID_CLIENT_CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+    }
+
     val scanResults = MutableLiveData<List<ScanResult>>(null)
     val fScanning = MutableLiveData<Boolean>(false)
     private val mResults = java.util.HashMap<String, ScanResult>()
-
+    val mConnectionState = MutableLiveData<Int>(-1)
     val mBPM = MutableLiveData<Int>(0)
+    private var mBluetoothGatt: BluetoothGatt? = null
 
     fun scanDevices(scanner: BluetoothLeScanner) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -76,15 +94,13 @@ class MyViewModel : ViewModel() {
         }
     }
 
-    companion object GattAttributes {
-        const val SCAN_PERIOD: Long = 3000
-        const val STATE_DISCONNECTED = 0
-        const val STATE_CONNECTING = 1
-        const val STATE_CONNECTED = 2
-        val UUID_HEART_RATE_MEASUREMENT = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
-        val UUID_HEART_RATE_SERVICE = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
-        val UUID_CLIENT_CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+    fun connectDevice(context: Context, device: BluetoothDevice) {
+        Log.d("DBG", "Connect attempt to ${device.address}")
+        mConnectionState.postValue(STATE_CONNECTING)
+        mBluetoothGatt = device.connectGatt(context, false, mGattCallback)
     }
+
+    fun disconnectDevice() = mBluetoothGatt?.disconnect()
 
     val leScanCallback: ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -95,65 +111,79 @@ class MyViewModel : ViewModel() {
             Log.d("DBG", "Device address: $deviceAddress (${result.isConnectable})") // build.gradle: minSdk = 26
         }
     }
-}
 
-class GattClientCallback(): BluetoothGattCallback() {
-    val UUID_HEART_RATE_MEASUREMENT = MyViewModel.UUID_HEART_RATE_MEASUREMENT
-    val UUID_HEART_RATE_SERVICE = MyViewModel.UUID_HEART_RATE_SERVICE
-    val UUID_CLIENT_CHARACTERISTIC_CONFIG = MyViewModel.UUID_CLIENT_CHARACTERISTIC_CONFIG
-
-    private var heartRate = mutableStateOf(0)
-
-    override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-        super.onConnectionStateChange(gatt, status, newState)
-        if (status == BluetoothGatt.GATT_FAILURE) {
-            Log.d("DBG", "GATT connection failure")
-            return
-        } else if (status == BluetoothGatt.GATT_SUCCESS) {
-            Log.d("DBG", "GATT connection success")
-            return
-        }
-        if (newState == BluetoothProfile.STATE_CONNECTED) {
-            Log.d("DBG", "Connected GATT service")
-            gatt.discoverServices();
-        } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-            Log.d("DBG", "Disconnected GATT service")
-        }
-    }
-    override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-        super.onServicesDiscovered(gatt, status)
-        if (status != BluetoothGatt.GATT_SUCCESS) {
-            return
-        }
-        Log.d("DBG", "onServicesDiscovered()")
-
-        for (gattService in gatt.services) {
-            Log.d("DBG", "Service ${gattService.uuid}")
-            if (gattService.uuid == UUID_HEART_RATE_SERVICE) {
-                Log.d("DBG", "BINGO!!!")
-
-                for (gattCharacteristic in gattService.characteristics)
-                    Log.d("DBG", "Characteristic ${gattCharacteristic.uuid}")
-
-                /* setup the system for the notification messages */
-                val characteristic = gatt.getService(UUID_HEART_RATE_SERVICE)
-                    .getCharacteristic(UUID_HEART_RATE_MEASUREMENT)
-                gatt.setCharacteristicNotification(characteristic, true)
+    private val mGattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                mConnectionState.postValue(STATE_CONNECTED)
+                Log.i("DBG", "Connected to GATT server")
+                Log.i("DBG", "Attempting to start service discovery")
+                gatt.discoverServices();
+            }
+            else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                mConnectionState.postValue(STATE_DISCONNECTED)
+                mBPM.postValue(0)
+                gatt.close()
+                disconnectDevice()
+                Log.i("DBG", "Disconnected from GATT server")
             }
         }
-    }
 
-    override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-        Log.d("DBG", "onDescriptorWrite")
-    }
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.e("DBG", "GATT FAILED")
+                return
+            }
 
-    @Deprecated("Deprecated in Java")
-    override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-        Log.d("DBG", "Characteristic data received")
-        if (characteristic.uuid == UUID_HEART_RATE_MEASUREMENT) {
-            val heartRateValue = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 1)
-            heartRate.value = heartRateValue
-            Log.d("BLE", "Heart rate: $heartRateValue")
+            Log.d("DBG", "onServicesDiscovered()")
+
+            for (gattService in gatt.services) {
+                Log.d("DBG", "Service ${gattService.uuid}")
+                if (gattService.uuid == UUID_HEART_RATE_SERVICE) {
+                    Log.d("DBG", "FOUND Heart Rate Service")
+
+                    for (gattCharacteristic in gattService.characteristics)
+                        Log.d("DBG", "Characteristic ${gattCharacteristic.uuid}")
+
+                    /* setup the system for the notification messages */
+                    val characteristic = gatt.getService(UUID_HEART_RATE_SERVICE).getCharacteristic(UUID_HEART_RATE_MEASUREMENT)
+                    if (gatt.setCharacteristicNotification(characteristic, true)) {
+                        // then enable them on the server
+                        val descriptor = characteristic.getDescriptor(UUID_CLIENT_CHARACTERISTIC_CONFIG)
+                        descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                        val writing = gatt.writeDescriptor(descriptor)
+                    }
+                }
+            }
+        }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int
+        ) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                var sthsth = characteristic.getStringValue(0);
+                Log.e("", "onCharacteristicRead: " + sthsth + " UUID " + characteristic.getUuid().toString() );
+            }
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            if (characteristic.uuid == UUID_HEART_RATE_MEASUREMENT) mBPM.postValue(extractHeartRateValue(characteristic))
+        }
+
+        fun extractHeartRateValue(characteristic: BluetoothGattCharacteristic): Int {
+            val flag = characteristic.properties
+            val format = if (flag and 0x01 != 0) {
+                BluetoothGattCharacteristic.FORMAT_UINT16
+            }
+            else { BluetoothGattCharacteristic.FORMAT_UINT8 }
+            return characteristic.getIntValue(format, 1) ?: -1
         }
     }
 }
@@ -163,51 +193,101 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
     val context = LocalContext.current
     val value: List<ScanResult>? by model.scanResults.observeAsState(null)
     val fScanning: Boolean by model.fScanning.observeAsState(false)
-
-    var btGatt: BluetoothGatt? = null
-    var mGattCallback = GattClientCallback()
-
+    val connectionState: Int by model.mConnectionState.observeAsState(-1)
+    val bpm: Int by model.mBPM.observeAsState(0)
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 16.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Button(
-            onClick = { model.scanDevices(mBluetoothAdapter.bluetoothLeScanner) },
-            modifier = Modifier.padding(8.dp)
+        if (value.isNullOrEmpty()) {
+            Text(
+                text = "No devices found",
+                modifier = Modifier
+                    .padding(8.dp)
+                    .weight(1f)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(8.dp)
+            ) {
+                items(value ?: emptyList()) { result ->
+                    val deviceName = result.device.name ?: "UNKNOWN"
+                    val deviceAddress = result.device.address
+                    val deviceStrength = result.rssi
+
+                    Row(
+                        modifier = Modifier.padding(2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "${deviceStrength}dBm",
+                            modifier = Modifier
+                                .padding(end = 10.dp)
+                                .align(Alignment.CenterVertically)
+                        )
+
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = deviceName,
+                                modifier = Modifier.padding(4.dp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(text = deviceAddress)
+                        }
+
+                        Button(
+                            enabled = result.isConnectable(),
+                            onClick = { model.connectDevice(context, result.device) },
+                            modifier = Modifier.padding(8.dp).align(Alignment.CenterVertically)
+                        ) {
+                            Text("Connect")
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 8.dp),
+            thickness = 1.dp,
+            color = Color.Gray
+        )
+
+        Row(
+            modifier = Modifier.padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Text(if (fScanning) "Stop Scan" else "Scan Now")
+            Text(
+                text = when (connectionState) {
+                    MyViewModel.STATE_CONNECTED -> "Connected"
+                    MyViewModel.STATE_CONNECTING -> "Connecting..."
+                    MyViewModel.STATE_DISCONNECTED -> "Disconnected"
+                    else -> ""
+                }
+            )
+
+            if (bpm != 0) TextButton(onClick = { model.disconnectDevice() }) { Text("$bpm") }
         }
 
         Spacer(modifier = Modifier.padding(8.dp))
 
-
-
-        Spacer(modifier = Modifier.padding(8.dp))
-
-        if (value.isNullOrEmpty()) {
-            Text(text = "No devices found", modifier = Modifier.padding(8.dp))
-        } else {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                    items(value ?: emptyList()) { result ->
-                        val deviceName = result.device.name ?: "Unknown Device"
-                        val deviceAddress = result.device.address
-                        Text(
-                            text = "$deviceName ($deviceAddress)",
-                            modifier = Modifier.padding(8.dp).clickable {
-                                Log.d("DBG", "Clicked $deviceName $deviceAddress")
-                                btGatt = result.device.connectGatt(context, false, mGattCallback)
-                            },
-                            color = if (result.isConnectable) Color.Gray else Color.DarkGray
-                        )
-                    }
-                }
-
-            }
+        Button(
+            onClick = { model.scanDevices(mBluetoothAdapter.bluetoothLeScanner) },
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(if (fScanning) "Stop Scan" else "Scan Now")
         }
     }
 }
@@ -217,14 +297,18 @@ class MainActivity : ComponentActivity() {
 
     private fun hasPermissions(): Boolean {
         if (mBluetoothAdapter == null || !mBluetoothAdapter!!.isEnabled) {
-            Log.d("DBG", "No Bluetooth LE capability")
+            Log.e("DBG", "No Bluetooth LE capability")
             return false
         }
         else if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
             checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED ||
             checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED ||
             checkSelfPermission(Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADMIN), 1);
+            requestPermissions(arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_ADMIN), 1);
         }
         return true
     }
@@ -240,22 +324,11 @@ class MainActivity : ComponentActivity() {
             Lab13Theme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(modifier = Modifier.padding(innerPadding)) {
-
-                        hasPermissions()
-
+                        Log.i("DBG", "Device has Bluetooth support: ${hasPermissions()}")
                         when {
-                            mBluetoothAdapter == null -> {
-                                Text("Bluetooth is not supported on this device")
-                            }
-                            !mBluetoothAdapter!!.isEnabled -> {
-                                Text("Bluetooth is turned off.")
-                            }
-                            else -> {
-                                Log.i("Bluetooth", "Bluetooth is enabled")
-                                ShowDevices(mBluetoothAdapter!!, viewModel())
-                            }
-
-
+                            mBluetoothAdapter == null       -> Text("Bluetooth is not supported on this device")
+                            !mBluetoothAdapter!!.isEnabled  -> Text("Bluetooth is turned off.")
+                            else                            -> ShowDevices(mBluetoothAdapter!!, viewModel())
                         }
                     }
                 }
