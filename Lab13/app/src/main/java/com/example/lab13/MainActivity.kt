@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -95,12 +96,15 @@ class MyViewModel : ViewModel() {
     }
 
     fun connectDevice(context: Context, device: BluetoothDevice) {
-        Log.d("DBG", "Connect attempt to ${device.address}")
+        Log.d("DBG", "Connect attempt to ${device.name} ${device.address}")
         mConnectionState.postValue(STATE_CONNECTING)
         mBluetoothGatt = device.connectGatt(context, false, mGattCallback)
     }
 
-    fun disconnectDevice() = mBluetoothGatt?.disconnect()
+    fun disconnectDevice() {
+        Log.d("DBG", "Disconnect device")
+        mBluetoothGatt?.disconnect()
+    }
 
     val leScanCallback: ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -123,8 +127,7 @@ class MyViewModel : ViewModel() {
             else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 mConnectionState.postValue(STATE_DISCONNECTED)
                 mBPM.postValue(0)
-                gatt.close()
-                disconnectDevice()
+                gatt.disconnect()
                 Log.i("DBG", "Disconnected from GATT server")
             }
         }
@@ -197,65 +200,15 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
     val bpm: Int by model.mBPM.observeAsState(0)
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 16.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (value.isNullOrEmpty()) {
-            Text(
-                text = "No devices found",
-                modifier = Modifier
-                    .padding(8.dp)
-                    .weight(1f)
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(8.dp)
-            ) {
-                items(value ?: emptyList()) { result ->
-                    val deviceName = result.device.name ?: "UNKNOWN"
-                    val deviceAddress = result.device.address
-                    val deviceStrength = result.rssi
-
-                    Row(
-                        modifier = Modifier.padding(2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "${deviceStrength}dBm",
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                                .align(Alignment.CenterVertically)
-                        )
-
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = deviceName,
-                                modifier = Modifier.padding(4.dp),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(text = deviceAddress)
-                        }
-
-                        Button(
-                            enabled = result.isConnectable(),
-                            onClick = { model.connectDevice(context, result.device) },
-                            modifier = Modifier.padding(8.dp).align(Alignment.CenterVertically)
-                        ) {
-                            Text("Connect")
-                        }
-                    }
-                }
-            }
+        Button(
+            onClick = { model.scanDevices(mBluetoothAdapter.bluetoothLeScanner) },
+            enabled = !fScanning,
+            modifier = Modifier.padding(8.dp).height(64.dp).width(144.dp)
+        ) {
+            Text(if (fScanning) "Scanning" else "Scan Now")
         }
 
         HorizontalDivider(
@@ -264,30 +217,70 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
             color = Color.Gray
         )
 
-        Row(
-            modifier = Modifier.padding(vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Text(
-                text = when (connectionState) {
-                    MyViewModel.STATE_CONNECTED -> "Connected"
-                    MyViewModel.STATE_CONNECTING -> "Connecting..."
-                    MyViewModel.STATE_DISCONNECTED -> "Disconnected"
-                    else -> ""
-                }
-            )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
+            Text(text = when (connectionState) {
+                MyViewModel.STATE_CONNECTED     -> "Connected"
+                MyViewModel.STATE_CONNECTING    -> "Connecting..."
+                MyViewModel.STATE_DISCONNECTED  -> "Disconnected"
+                else -> ""
+            })
 
-            if (bpm != 0) TextButton(onClick = { model.disconnectDevice() }) { Text("$bpm") }
+            if (bpm !=0) TextButton(onClick = { model.disconnectDevice() }) { Text("$bpm") }
         }
 
-        Spacer(modifier = Modifier.padding(8.dp))
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 8.dp),
+            thickness = 1.dp,
+            color = Color.Gray
+        )
 
-        Button(
-            onClick = { model.scanDevices(mBluetoothAdapter.bluetoothLeScanner) },
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(if (fScanning) "Stop Scan" else "Scan Now")
+        if (value.isNullOrEmpty()) Text(text = "No devices found", modifier = Modifier.padding(8.dp))
+        else {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(2.dp)) {
+                    items(value ?: emptyList()) { result ->
+                        val deviceName = result.device.name ?: "UNKNOWN"
+                        val deviceAddress = result.device.address
+                        val deviceStrength = result.rssi
+
+                        Row(
+                            modifier = Modifier.padding(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${deviceStrength}dBm",
+                                modifier = Modifier.padding(end = 10.dp).align(Alignment.CenterVertically)
+                            )
+
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = deviceName,
+                                    modifier = Modifier.padding(4.dp),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Text(text = deviceAddress)
+                            }
+
+                            Button(
+                                enabled = result.isConnectable(),
+                                onClick = { model.connectDevice(context, result.device) },
+                                modifier = Modifier.padding(8.dp).align(Alignment.CenterVertically)
+                            ) {
+                                Text("Connect")
+                            }
+                        }
+
+                    }
+                }
+            }
         }
     }
 }
