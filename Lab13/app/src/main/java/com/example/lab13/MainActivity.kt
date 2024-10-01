@@ -234,7 +234,9 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
             color = Color.Gray
         )
 
-        if (value.isNullOrEmpty()) Text(text = "No devices found", modifier = Modifier.padding(8.dp))
+        if (value.isNullOrEmpty()) {
+            Text(text = "No devices found", modifier = Modifier.padding(8.dp))
+        }
         else {
             Column(
                 modifier = Modifier.fillMaxSize().padding(8.dp),
@@ -277,7 +279,6 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
                                 Text("Connect")
                             }
                         }
-
                     }
                 }
             }
@@ -320,7 +321,7 @@ class MainActivity : ComponentActivity() {
                         Log.i("DBG", "Device has Bluetooth support: ${hasPermissions()}")
                         when {
                             mBluetoothAdapter == null       -> Text("Bluetooth is not supported on this device")
-                            !mBluetoothAdapter!!.isEnabled  -> Text("Bluetooth is turned off.")
+                            !mBluetoothAdapter!!.isEnabled  -> Text("Bluetooth is turned off")
                             else                            -> ShowDevices(mBluetoothAdapter!!, viewModel())
                         }
                     }
