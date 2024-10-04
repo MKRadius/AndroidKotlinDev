@@ -1,7 +1,6 @@
-package com.example.lab13
+package com.example.lab14
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -16,18 +15,15 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import android.os.ParcelUuid
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,7 +32,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -45,19 +40,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.lab13.ui.theme.Lab13Theme
+import com.example.lab14.ui.theme.Lab14Theme
+import com.github.mikephil.charting.charts.LineChart
+import com.github.mikephil.charting.data.Entry
+import com.github.mikephil.charting.data.LineData
+import com.github.mikephil.charting.data.LineDataSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -79,7 +82,30 @@ class MyViewModel : ViewModel() {
     private val mResults = java.util.HashMap<String, ScanResult>()
     val mConnectionState = MutableLiveData<Int>(-1)
     val mBPM = MutableLiveData<Int>(0)
+    val mBPMEntryList = MutableLiveData<List<Entry>>(listOf())
     private var mBluetoothGatt: BluetoothGatt? = null
+
+    var xValue: Int = 0
+    fun convertIntToEntry(yValue: Int) = Entry((xValue++).toFloat(), yValue.toFloat())
+
+    fun addEntry(newEntry: Entry) {
+        val currentList = mBPMEntryList.value ?: listOf()
+        val updatedList = currentList + newEntry
+
+        if (updatedList.size > 25) {
+            val trimmedList = updatedList.drop(1)
+            mBPMEntryList.postValue(trimmedList)
+        }
+        else {
+            mBPMEntryList.postValue(updatedList)
+        }
+    }
+
+    fun resetGraph() {
+        mBPM.postValue(0)
+        mBPMEntryList.postValue(listOf())
+        xValue = 0
+    }
 
     fun scanDevices(scanner: BluetoothLeScanner) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -106,6 +132,7 @@ class MyViewModel : ViewModel() {
     fun disconnectDevice() {
         Log.d("DBG", "Disconnect device")
         mBluetoothGatt?.disconnect()
+        resetGraph()
     }
 
     val leScanCallback: ScanCallback = object : ScanCallback() {
@@ -114,7 +141,7 @@ class MyViewModel : ViewModel() {
             val device = result.device
             val deviceAddress = device.address
             mResults[deviceAddress] = result
-            Log.d("DBG", "Device address: $deviceAddress (${result.isConnectable})") // build.gradle: minSdk = 26
+            Log.d("DBG", "Device address: $deviceAddress (${result.isConnectable})")
         }
     }
 
@@ -124,11 +151,10 @@ class MyViewModel : ViewModel() {
                 mConnectionState.postValue(STATE_CONNECTED)
                 Log.i("DBG", "Connected to GATT server")
                 Log.i("DBG", "Attempting to start service discovery")
-                gatt.discoverServices();
+                gatt.discoverServices()
             }
             else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 mConnectionState.postValue(STATE_DISCONNECTED)
-                mBPM.postValue(0)
                 gatt.disconnect()
                 gatt.close()
                 Log.i("DBG", "Disconnected from GATT server")
@@ -163,24 +189,15 @@ class MyViewModel : ViewModel() {
             }
         }
 
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray,
-            status: Int
-        ) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                var sthsth = characteristic.getStringValue(0);
-                Log.e("", "onCharacteristicRead: " + sthsth + " UUID " + characteristic.getUuid().toString() );
-            }
-        }
-
         @Deprecated("Deprecated in Java")
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic
         ) {
-            if (characteristic.uuid == UUID_HEART_RATE_MEASUREMENT) mBPM.postValue(extractHeartRateValue(characteristic))
+            if (characteristic.uuid == UUID_HEART_RATE_MEASUREMENT) {
+                mBPM.postValue(extractHeartRateValue(characteristic)
+                    .also { addEntry(convertIntToEntry(it)) })
+            }
         }
 
         fun extractHeartRateValue(characteristic: BluetoothGattCharacteristic): Int {
@@ -195,7 +212,48 @@ class MyViewModel : ViewModel() {
 }
 
 @Composable
-fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewModel()) {
+fun LineChartView(
+    entries: List<Entry>,
+    label: String
+) {
+    AndroidView(
+        modifier = Modifier.fillMaxSize().background(Color.White),
+        factory = { context ->
+            LineChart(context).apply {
+                axisLeft.axisMinimum = 65f
+                axisLeft.axisMaximum = 115f
+                axisRight.isEnabled = false
+            }
+        },
+        update = { chart ->
+            val dataSet = LineDataSet(entries, label).apply {
+                color = Color.Blue.toArgb()
+                valueTextColor = Color.Black.toArgb()
+                setCircleColor(Color.Red.toArgb())
+                circleRadius = 3f
+                setDrawValues(false)
+                setDrawCircles(true)
+            }
+
+            val lineData = LineData(dataSet)
+            chart.data = lineData
+            chart.invalidate()
+        }
+    )
+}
+
+@Composable
+fun ShowGraph(model: MyViewModel, onNavigateBack: () -> Unit) {
+    val bpmEntryList: List<Entry> by model.mBPMEntryList.observeAsState(listOf())
+
+    Column() {
+        Button({ onNavigateBack() }) { Text("Back") }
+        LineChartView(bpmEntryList, "")
+    }
+}
+
+@Composable
+fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel, onNavigateBack: () -> Unit) {
     val context = LocalContext.current
     val value: List<ScanResult>? by model.scanResults.observeAsState(null)
     val fScanning: Boolean by model.fScanning.observeAsState(false)
@@ -237,6 +295,7 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
                     Text(text = "BPM", fontSize = 12.sp)
                 }
 
+                Button({ onNavigateBack() }) { Text("Graph") }
                 Button(
                     onClick = { model.disconnectDevice() },
                     colors = ButtonDefaults.buttonColors(
@@ -306,6 +365,17 @@ fun ShowDevices(mBluetoothAdapter: BluetoothAdapter, model: MyViewModel = viewMo
     }
 }
 
+@Composable
+fun App(mBluetoothAdapter: BluetoothAdapter) {
+    val viewModel: MyViewModel = viewModel()
+    var currentScreen by remember { mutableStateOf("main") }
+
+    when (currentScreen) {
+        "main" -> ShowDevices(mBluetoothAdapter, viewModel(), onNavigateBack = { currentScreen = "graph"})
+        "graph" -> ShowGraph(viewModel, onNavigateBack = { currentScreen = "main"})
+    }
+}
+
 class MainActivity : ComponentActivity() {
     private var mBluetoothAdapter: BluetoothAdapter? = null
 
@@ -335,14 +405,14 @@ class MainActivity : ComponentActivity() {
         mBluetoothAdapter = bluetoothManager.adapter
 
         setContent {
-            Lab13Theme {
+            Lab14Theme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(modifier = Modifier.padding(innerPadding)) {
                         Log.i("DBG", "Device has Bluetooth support: ${hasPermissions()}")
                         when {
                             mBluetoothAdapter == null       -> Text("Bluetooth is not supported on this device")
                             !mBluetoothAdapter!!.isEnabled  -> Text("Bluetooth is turned off")
-                            else                            -> ShowDevices(mBluetoothAdapter!!, viewModel())
+                            else                            -> App(mBluetoothAdapter!!)
                         }
                     }
                 }
